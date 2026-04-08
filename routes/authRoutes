@@ -1,0 +1,30 @@
+const express =require("express");
+const {
+    register,
+    login,
+    forgotPassword,
+    verifyOtpByEmail,
+    verifyOtpByMobile,
+    resetPassword
+} = require("../controllers/authController");
+
+const authMiddleware =require("../middleware/authMiddleware");
+
+const router=express.Router();
+
+// 🔐 Auth routes
+router.post("/register", register);
+router.post("/login", login);
+
+// 🔑 Forgot password flow
+router.post("/forgot-password", forgotPassword);
+router.post("/verify-otp-email", verifyOtpByEmail);
+router.post("/verify-otp-mobile", verifyOtpByMobile)
+router.post("/reset-password", resetPassword);
+
+router.get("/profile",authMiddleware,(req,res) => {
+    res.json({message:"Protected data",user:req.user});
+});
+
+module.exports = router;
+
