@@ -391,75 +391,94 @@ exports.verifyOtpByMobile = async (req, res) => {
     }
 };
 
+
 exports.resetPassword = async (req, res) => {
     try {
-        const { input, newPassword, confirmPassword } = req.body;
-        if(!input){
+        let { newPassword, confirmPassword } = req.body;
+
+        // Empty checks
+
+        if (!newPassword || !newPassword.trim()) {
             return res.status(400).json({
-                message:"Email or Mobile required"
+                message: "New password is required"
             });
         }
 
-        const isEmail= /^[a-zA-Z0-9._%+-]+@(gmail|outlook|yahoo)\.(com|in)$/.test(input);
-        const isMobile= /^[0-9]{10}$/.test(input);
-
-        let user;
-        
-        if(isEmail){
-            user = await User.findOne({ email:input }).select("+password");
-        }else if (isMobile){
-            user = await User.findOne({ mobile:input }).select("+password");
+        if (!confirmPassword || !confirmPassword.trim()) {
+            return res.status(400).json({
+                message: "Confirm New password is required"
+            });
         }
 
-        if (!user) {
-            return res.status(400).json({ message: "User not found" });
-        }
+        // Trim values
+        newPassword = newPassword.trim();
+        confirmPassword = confirmPassword.trim();
 
-        if (!newPassword || !confirmPassword) {
-            return res.status(400).json({ message: "Password fields required" });
-        }
-
+        // Password match Check
         if (newPassword !== confirmPassword) {
-            return res.status(400).json({ message: "Passwords do not match" });
+            return res.status(400).json({
+                message: "Passwords do not match"
+            });
         }
 
-        // Combine current + last 3 passwords
+        // Password Validation
+        let errors = [];
+
+        if (!/.{8,}/.test(newPassword)) {
+            errors.push("Minimum 8 characters required");
+        }
+        if (!/[A-Z]/.test(newPassword)) {
+            errors.push("At least one uppercase letter required");
+        }
+        if (!/[a-z]/.test(newPassword)) {
+            errors.push("At least one lowercase letter required");
+        }
+        if (!/[0-9]/.test(newPassword)) {
+            errors.push("At least one number required");
+        }
+        if (!/[!@#$%^&*(),.?\":{}|<>]/.test(newPassword)) {
+            errors.push("At least one special character required");
+        }
+
+        if (errors.length > 0) {
+            return res.status(400).json({
+                message: errors.join(", ")
+            });
+        }
+
+        // Password reuse Check
         const allPasswords = [user.password, ...(user.passwordHistory || [])];
 
-        // Check new password against last 3
         for (let oldPass of allPasswords) {
             const isMatch = await bcrypt.compare(newPassword, oldPass);
             if (isMatch) {
                 return res.status(400).json({
-                    message: "You cannot reuse last 3 passwords"
+                    message: "Cannot use last 3 passwords"
                 });
             }
         }
 
-        // Hash new password
+        // Save new Password
         const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-        // Update password history (keep only last 3)
         user.passwordHistory = [
             user.password,
             ...(user.passwordHistory || [])
         ].slice(0, 3);
 
-        // Save new password
         user.password = hashedPassword;
-        
-        // Clear OTP after use
-        user.otp = null;
-        user.otpExpiry = null;
 
-        await user.save();  
+        await user.save();
 
-        res.json({
-            message: "Password reset successfully",
-            redirectUrl: "/login.html"
+        // Success
+        return res.json({
+            message: "Password reset successfully"
         });
 
-        } catch (error) {
-        return res.status(500).json({ message: "Server error" });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({
+            message: "Something went wrong"
+        });
     }
 };
